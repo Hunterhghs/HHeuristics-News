@@ -44,11 +44,23 @@ const RSS_SOURCES = [
     name: "CNN Top Stories",
     url: "http://rss.cnn.com/rss/edition.rss",
   },
+  {
+    name: "The Guardian World",
+    url: "https://www.theguardian.com/world/rss",
+  },
+  {
+    name: "Al Jazeera Top Stories",
+    url: "https://www.aljazeera.com/xml/rss/all.xml",
+  },
+  {
+    name: "NPR World",
+    url: "https://feeds.npr.org/1004/rss.xml",
+  },
 ];
 
 const CACHE_TTL_SECONDS = 15 * 60; // 15 minutes
 const MAX_ARTICLES_PER_SOURCE = 6;
-const FINAL_ARTICLE_COUNT = 12;
+const FINAL_ARTICLE_COUNT = 15;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -138,14 +150,7 @@ async function generateNews(env: Env): Promise<CachedNews> {
 
   const flatArticles = rssResults.flat().slice(0, MAX_ARTICLES_PER_SOURCE * RSS_SOURCES.length);
 
-  // Deduplicate by title
-  const deduped: { [key: string]: Article } = {};
-  for (const a of flatArticles) {
-    const key = a.title.toLowerCase();
-    if (!deduped[key]) deduped[key] = a;
-  }
-
-  const uniqueArticles = Object.values(deduped).slice(0, FINAL_ARTICLE_COUNT);
+  const uniqueArticles = dedupeAndInterleaveBySource(flatArticles).slice(0, FINAL_ARTICLE_COUNT);
 
   const summarized = await summarizeArticles(env, uniqueArticles);
 
@@ -154,6 +159,45 @@ async function generateNews(env: Env): Promise<CachedNews> {
     ttlSeconds: CACHE_TTL_SECONDS,
     articles: summarized,
   };
+}
+
+function dedupeAndInterleaveBySource(articles: Article[]): Article[] {
+  // Deduplicate by normalized title
+  const dedupedMap: { [key: string]: Article } = {};
+  for (const a of articles) {
+    const key = a.title.toLowerCase();
+    if (!dedupedMap[key]) dedupedMap[key] = a;
+  }
+
+  const deduped = Object.values(dedupedMap);
+
+  // Group by source
+  const bySource = new Map<string, Article[]>();
+  for (const a of deduped) {
+    const list = bySource.get(a.source) ?? [];
+    list.push(a);
+    bySource.set(a.source, list);
+  }
+
+  // Round-robin across sources for better diversity
+  const result: Article[] = [];
+  const sourceKeys = Array.from(bySource.keys());
+  let added = true;
+
+  while (added && result.length < deduped.length) {
+    added = false;
+    for (const key of sourceKeys) {
+      const list = bySource.get(key);
+      if (list && list.length > 0) {
+        const item = list.shift()!;
+        result.push(item);
+        added = true;
+        if (result.length >= deduped.length) break;
+      }
+    }
+  }
+
+  return result;
 }
 
 function parseRss(xml: string, source: string): Article[] {
@@ -457,12 +501,6 @@ function renderPage(env: Env, news: CachedNews): string {
     .hero-meta span {
       opacity: 0.9;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.4fr);
-      gap: 1.5rem;
-      align-items: flex-start;
-    }
     @media (max-width: 900px) {
       header.site-header {
         flex-direction: column;
@@ -471,11 +509,8 @@ function renderPage(env: Env, news: CachedNews): string {
       .meta {
         text-align: left;
       }
-      .grid {
-        grid-template-columns: minmax(0, 1fr);
-      }
     }
-    section.main-column, section.side-column {
+    section.main-column {
       background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(15, 23, 42, 0.98));
       border-radius: 18px;
       padding: 1.25rem 1.25rem 1.35rem;
@@ -484,8 +519,6 @@ function renderPage(env: Env, news: CachedNews): string {
         0 16px 40px rgba(15, 23, 42, 0.9),
         0 0 0 1px rgba(15, 23, 42, 0.4);
       backdrop-filter: blur(28px);
-    }
-    section.main-column {
       border-image: linear-gradient(135deg, rgba(148, 163, 184, 0.6), rgba(31, 111, 235, 0.8)) 1;
     }
     .section-title {
@@ -507,8 +540,13 @@ function renderPage(env: Env, news: CachedNews): string {
     }
     .cards {
       display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.5fr);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 1rem;
+    }
+    @media (max-width: 1024px) {
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
     @media (max-width: 700px) {
       .cards {
@@ -581,12 +619,27 @@ function renderPage(env: Env, news: CachedNews): string {
       font-size: 0.9rem;
       color: var(--text-muted);
     }
-    .side-column h3 {
+    .about {
+      max-width: 1120px;
+      margin: 0 auto 1.5rem;
+      padding: 0 1.25rem;
+    }
+    .about-inner {
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.98));
+      border-radius: 18px;
+      padding: 1.25rem 1.25rem 1.35rem;
+      border: 1px solid var(--border-subtle);
+      box-shadow:
+        0 16px 40px rgba(15, 23, 42, 0.9),
+        0 0 0 1px rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(28px);
+    }
+    .about-inner h3 {
       margin: 0 0 0.35rem;
       font-size: 0.95rem;
       font-weight: 500;
     }
-    .side-column p {
+    .about-inner p {
       margin: 0 0 0.75rem;
       font-size: 0.85rem;
       color: var(--text-muted);
@@ -667,43 +720,43 @@ function renderPage(env: Env, news: CachedNews): string {
       </div>
     </section>
 
-    <div class="grid">
-      <section class="main-column">
-        <div class="section-title">
-          <h2>Top stories</h2>
-          <span>${news.articles.length || "No"} stories in this snapshot</span>
-        </div>
-        <div class="cards">
-          ${articlesHtml}
-        </div>
-      </section>
-
-      <section class="side-column">
-        <div class="section-title">
-          <h2>About this feed</h2>
-        </div>
-        <h3>AI-assisted, human-centered</h3>
-        <p>
-          This page is generated by Cloudflare Workers, which fetch live headlines from multiple
-          global outlets and uses large language models to create short, neutral summaries.
-        </p>
-        <p>
-          It is designed as a quick situational awareness layer, not a replacement for full
-          articles or primary reporting.
-        </p>
-        <div class="badge-row">
-          <span class="badge">Cloudflare Workers</span>
-          <span class="badge">Workers AI</span>
-          <span class="badge">RSS Aggregation</span>
-          <span class="badge">Automatic updates</span>
-        </div>
-        <p>
-          For deeper sector research and strategic analysis, visit the main HHeuristics site at
-          <a href="https://hheuristics.com" target="_blank" rel="noopener noreferrer">hheuristics.com</a>.
-        </p>
-      </section>
-    </div>
+    <section class="main-column">
+      <div class="section-title">
+        <h2>Top stories</h2>
+        <span>${news.articles.length || "No"} stories in this snapshot</span>
+      </div>
+      <div class="cards">
+        ${articlesHtml}
+      </div>
+    </section>
   </div>
+
+  <section class="about">
+    <div class="about-inner">
+      <div class="section-title">
+        <h2>About this feed</h2>
+      </div>
+      <h3>AI-assisted, human-centered</h3>
+      <p>
+        This page is generated by Cloudflare Workers, which fetch live headlines from multiple
+        global outlets and uses large language models to create short, neutral summaries.
+      </p>
+      <p>
+        It is designed as a quick situational awareness layer, not a replacement for full
+        articles or primary reporting.
+      </p>
+      <div class="badge-row">
+        <span class="badge">Cloudflare Workers</span>
+        <span class="badge">Workers AI</span>
+        <span class="badge">RSS Aggregation</span>
+        <span class="badge">Automatic updates</span>
+      </div>
+      <p>
+        For deeper sector research and strategic analysis, visit the main HHeuristics site at
+        <a href="https://hheuristics.com" target="_blank" rel="noopener noreferrer">hheuristics.com</a>.
+      </p>
+    </div>
+  </section>
 
   <footer class="site-footer">
     <span>© ${new Date().getFullYear()} HHeuristics. All rights reserved.</span>
