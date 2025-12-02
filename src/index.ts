@@ -246,8 +246,9 @@ async function summarizeArticles(env: Env, articles: Article[]): Promise<Article
   const prompt = [
     "You are an editorial assistant for a professional market research firm.",
     "You are given a list of news headlines with short descriptions.",
-    "For each item, produce a 2–3 sentence summary written for an informed general audience.",
-    "Avoid sensational language; focus on what happened and why it matters.",
+    "For each item, produce a 2–3 sentence summary (30–60 words) written for an informed general audience.",
+    "Do NOT include any URLs, HTML tags, bullet points, or citation markers.",
+    "Avoid sensational language; focus on what happened and why it matters in clear, grammatically correct prose.",
     "",
     "Return your answer as JSON with the following shape:",
     '{ "items": [ { "title": string, "summary": string } ] }',
@@ -289,10 +290,12 @@ async function summarizeArticles(env: Env, articles: Article[]): Promise<Article
 
     return articles.map((article, index) => {
       const s = summaries[index];
+      const rawTitle = (s?.title ?? "").trim();
+      const rawSummary = (s?.summary ?? "").trim();
       return {
         ...article,
-        title: s?.title?.trim() || article.title,
-        summary: s?.summary?.trim() || article.summary,
+        title: rawTitle ? cleanRssText(rawTitle) : article.title,
+        summary: normalizeSummary(rawSummary, article.summary),
       };
     });
   } catch (err) {
@@ -323,6 +326,32 @@ function safeJsonFromText(text: string): unknown | null {
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 1) + "…";
+}
+
+function normalizeSummary(text: string, fallback: string): string {
+  let base = cleanRssText(text);
+  if (!base) {
+    base = cleanRssText(fallback);
+  }
+
+  // Strip any remaining URLs
+  base = base.replace(/https?:\/\/\S+/gi, "").replace(/www\.\S+/gi, "");
+
+  // Collapse whitespace
+  base = base.replace(/\s+/g, " ").trim();
+  if (!base) return "";
+
+  // Naive sentence split and keep first 2–3
+  const sentences = base.split(/(?<=[\.!?])\s+/);
+  const kept = sentences.slice(0, 3).join(" ");
+  let normalized = kept || base;
+
+  // Hard cap on length
+  if (normalized.length > 320) {
+    normalized = truncate(normalized, 320);
+  }
+
+  return normalized;
 }
 
 function cleanRssText(html: string): string {
