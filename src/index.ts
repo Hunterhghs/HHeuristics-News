@@ -217,10 +217,12 @@ function parseRss(xml: string, source: string): Article[] {
     const pubDateMatch = raw.match(pubDateRegex);
     const descMatch = raw.match(descRegex);
 
-    const title = (titleMatch?.[1] || titleMatch?.[2] || "").trim();
+    const rawTitle = (titleMatch?.[1] || titleMatch?.[2] || "").trim();
+    const title = cleanRssText(rawTitle);
     const url = (linkMatch?.[1] || "").trim();
     const publishedAt = (pubDateMatch?.[1] || "").trim();
-    const description = (descMatch?.[1] || descMatch?.[2] || "").trim();
+    const rawDescription = (descMatch?.[1] || descMatch?.[2] || "").trim();
+    const description = truncate(cleanRssText(rawDescription), 320);
 
     if (!title || !url) continue;
 
@@ -321,6 +323,30 @@ function safeJsonFromText(text: string): unknown | null {
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
   return text.slice(0, max - 1) + "…";
+}
+
+function cleanRssText(html: string): string {
+  if (!html) return "";
+
+  // Normalize common block-level tags to spaces, then strip remaining tags
+  let text = html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/p>/gi, " ")
+    .replace(/<\/div>/gi, " ")
+    .replace(/<[^>]+>/g, "");
+
+  // Decode a few common HTML entities
+  text = text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#39;/gi, "'");
+
+  // Collapse whitespace
+  return text.replace(/\s+/g, " ").trim();
 }
 
 function renderPage(env: Env, news: CachedNews): string {
