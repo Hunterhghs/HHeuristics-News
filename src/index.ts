@@ -95,8 +95,11 @@ export default {
   },
 
   // Optional: scheduled cron trigger defined in wrangler.toml
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    cachedNews = await generateNews(env);
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    const refresh = generateNews(env).then((news) => {
+      cachedNews = news;
+    });
+    ctx.waitUntil(refresh);
   },
 } satisfies ExportedHandler<Env>;
 
@@ -438,9 +441,9 @@ function renderPage(env: Env, news: CachedNews): string {
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
   <style>
     :root {
-      --bg: #020617;
-      --bg-alt: #020b1f;
-      --card-bg: #020617;
+      --bg: #021734;
+      --bg-alt: #031023;
+      --card-bg: #021326;
       --border-subtle: rgba(148, 163, 184, 0.35);
       --text-main: #e5e7eb;
       --text-muted: #9ca3af;
@@ -455,7 +458,7 @@ function renderPage(env: Env, news: CachedNews): string {
       margin: 0;
       padding: 0;
       font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #020617 0, #000 45%, #020617 100%);
+      background: radial-gradient(circle at top, #03224b 0, #021326 45%, #020b2f 100%);
       color: var(--text-main);
       min-height: 100%;
     }
