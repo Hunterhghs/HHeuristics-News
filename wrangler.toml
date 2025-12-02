@@ -1,0 +1,17 @@
+name = "hheuristics-news"
+main = "src/index.ts"
+compatibility_date = "2024-11-12"
+
+[ai]
+binding = "AI"
+
+[vars]
+SITE_NAME = "HHeuristics News"
+SITE_TAGLINE = "AI-curated global news for informed decision-makers."
+PRIMARY_COLOR = "#0c1a2a"
+ACCENT_COLOR = "#1f6feb"
+
+[triggers]
+crons = ["*/30 * * * *"]
+
+

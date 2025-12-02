@@ -1,0 +1,21 @@
+{
+  "name": "hheuristics-news",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-updated news microsite for HHeuristics, deployed on Cloudflare Workers.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "html-escaper": "^3.0.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241112.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.90.0"
+  }
+}
+
+
